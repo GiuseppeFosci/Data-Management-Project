@@ -17,9 +17,14 @@ This project aims to manage a dataset containing road incidents by creating a gr
 ## Project Structure
 
 ## Project Structure
-- `v1.py`: Initial version of the script that creates nodes and relationships for incidents, vehicles, and persons but lacks connectivity between different incidents.
-- `v2.py`: This version enhances connectivity by making `TipoVeicolo` a separate node. This allows for a better connection between the various subgraphs created in the first version, resulting in a larger, interconnected graph.
-- `v3.py`: Further increases connectivity by introducing `Gender` as a new node, allowing for more complex relationships and analyses related to gender in the incident data.
+
+### Scripts_Neo4j
+- `v1.py`: Initial version of the script that creates nodes and relationships for incidents, vehicles, and persons in Neo4j but lacks connectivity between different incidents.
+- `v2.py`: This version enhances connectivity in Neo4j by making `TipoVeicolo` a separate node. This allows for a better connection between the various subgraphs created in the first version, resulting in a larger, interconnected graph.
+- `v3.py`: Further increases connectivity in Neo4j by introducing `Gender` as a new node, allowing for more complex relationships and analyses related to gender in the incident data.
+
+### Scripts_PgAdmin
+- `v1.py`: A script that imports the CSV dataset into PostgreSQL, automatically loading all CSV files in the specified directory, creating tables, and inserting data while maintaining relationships through foreign keys.
 
 ## Requirements
 
@@ -27,8 +32,29 @@ This project aims to manage a dataset containing road incidents by creating a gr
 - Neo4j Database
 - Required Python libraries:
   - `neo4j`
+  - `psycopg2`
+  - `os` #For 
+  - `re`
+  - `csv`
+  - `chardet`  # For detecting CSV file encoding
  
-## Configuration
+## Configuration for Postgres
+
+1. **Modify the following section of the code in v1.py to configure the connection to PostgreSQL with your credentials:
+
+   ```python
+   import psycopg2
+
+    conn = psycopg2.connect(
+      dbname="your_database_name",
+      user="your_username",
+      password="your_password",
+      host="localhost",
+      port="5432"
+)
+   ```
+ 
+## Configuration for Neo4j
 
 1. **Connect to Neo4j**: Modify the following section of the code to configure the connection to Neo4j with your credentials:
 
