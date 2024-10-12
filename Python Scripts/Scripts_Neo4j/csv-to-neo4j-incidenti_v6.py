@@ -2,13 +2,16 @@ import csv
 import os
 import time
 from neo4j import GraphDatabase
+from tqdm import tqdm  # Importa tqdm
 
 # Configurazione della connessione a Neo4j
 uri = "bolt://localhost:7687"
 driver = GraphDatabase.driver(uri, auth=("neo4j", "adminadmin"))
 
-# Percorso del file CSV degli incidenti
-incidents_csv = '../Datasets/2020/csv_incidentiGennaio.csv'
+# Percorsi dei file CSV degli incidenti
+incidents_csv_files = [
+    './Datasets/2020/csv_incidentiFebbraio.csv',
+]
 
 def clear_graph(session):
     # Cancello tutti i nodi e le relazioni nel grafo
@@ -28,45 +31,29 @@ def create_relationship_query(from_label, to_label, relationship_type, from_keys
         f"MERGE (a)-[r:{relationship_type}]->(b)"
     )
 
-def read_incidents_csv(file_path):
+def read_incidents_csv(file_paths):
     incidents = []
-    try:
-        with open(file_path, mode='r', encoding='latin-1') as incidents_file:
-            reader = csv.DictReader(incidents_file, delimiter=';')
-            for row in reader:
-                cleaned_row = {key.strip().replace(' ', '_').lower(): value.strip() if value is not None else '' for key, value in row.items()}
-                incidents.append(cleaned_row)
-    except Exception as e:
-        print(f"An error occurred while reading the file: {e}")
-        exit(1)
+    for file_path in file_paths:
+        try:
+            with open(file_path, mode='r', encoding='latin-1') as incidents_file:
+                reader = csv.DictReader(incidents_file, delimiter=';')
+                for row in reader:
+                    cleaned_row = {key.strip().replace(' ', '_').lower(): value.strip() if value is not None else '' for key, value in row.items()}
+                    incidents.append(cleaned_row)
+        except Exception as e:
+            print(f"An error occurred while reading the file {file_path}: {e}")
+            exit(1)
     return incidents
 
 def insert_data_to_neo4j(incidents):
     total_incidents = len(incidents)
     start_time = time.time()
-    last_print_time = start_time
     idpersona_counter = 1
 
     with driver.session() as session:
         clear_graph(session)
 
-        for i, incident in enumerate(incidents, start=1):
-            current_time = time.time()
-            elapsed_time = current_time - last_print_time
-
-            if elapsed_time >= 1:
-                percent_complete = (i / total_incidents) * 100
-                elapsed_since_start = current_time - start_time
-                avg_time_per_incident = elapsed_since_start / i
-                remaining_incidents = total_incidents - i
-                estimated_remaining_time = avg_time_per_incident * remaining_incidents
-
-                minutes, seconds = divmod(estimated_remaining_time, 60)
-                print(f"Processing incident {i}/{total_incidents} ({percent_complete:.2f}% complete). "
-                      f"Estimated time remaining: {int(minutes)}m {int(seconds)}s.")
-                
-                last_print_time = current_time
-
+        for incident in tqdm(incidents, desc="Processing incidents", unit="incident"):
             # Creazione nodo Incidente
             incident_query, incident_params = create_node_query(
                 'Incidente',
@@ -173,7 +160,7 @@ def insert_data_to_neo4j(incidents):
                 )
 
 # Inserisci i nodi e le relazioni
-insert_data_to_neo4j(read_incidents_csv(incidents_csv))
+insert_data_to_neo4j(read_incidents_csv(incidents_csv_files))
 
 # Chiudi la connessione al database
 driver.close()

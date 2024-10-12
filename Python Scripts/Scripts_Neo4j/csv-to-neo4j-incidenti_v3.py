@@ -1,84 +1,56 @@
-import csv 
+import csv
 import os
 import time
 from neo4j import GraphDatabase
+from tqdm import tqdm  # Importa tqdm per la barra di avanzamento
 
-# Caso modellazione 1
-# Con questo tipo di modellazione, otteniamo "tanti" piccoli grafi
-# riferito ad un protocollo, ma non connessi tra loro.
-
-print("Current working directory:", os.getcwd()) #Stampo la directory di lavoro corrente
-
-# Configuro la connessione a Neo4j
 uri = "bolt://localhost:7687"
 driver = GraphDatabase.driver(uri, auth=("neo4j", "adminadmin"))
 
-# Percorso del file CSV degli incidenti
-incidents_csv = './Datasets/2020/csv_incidentiGennaio.csv'  
-
+incidents_csv_files = [
+    './Datasets/2020/csv_incidentiFebbraio.csv',  
+]
 
 def clear_graph(session):
-    # Cancello tutti i nodi e relazioni nel grafo
     session.run("MATCH (n) DETACH DELETE n")
     print("Graph cleared")
 
-
-# Esempio stringa Cypher da creare
-# MERGE (n:Incidente { protocollo: $protocollo, dataincidente: $dataincidente, chilometrica: $chilometrica, natura: $natura })
-# I parametri verranno poi sostituiti con i valori reali
-def create_node_query(label, **kwargs):  #Creo una query Cypher per inserire (o unire) un nodo con un'etichetta specifica.
-    #label etichetta del nood (Incidente, Persona...)
-    
-    # kwargs.items() serve a restituire una lista di coppie chiave-valore (dizionario) che rappresentano gli attributi del nodo
+def create_node_query(label, **kwargs):
     filtered_kwargs = {key: value for key, value in kwargs.items() if value}
-   
-   #join per unire gli elementi in una singola stringa, separati con virgola e spazio
     param_str = ', '.join([f'{key}: ${key}' for key in filtered_kwargs.keys()])
     return f"MERGE (n:{label} {{ {param_str} }})", filtered_kwargs
 
-def create_relationship_query(from_label, to_label, relationship_type, from_key, to_key): #Creo una query Cypher per stabilire una relazione tra due nodi.
+def create_relationship_query(from_label, to_label, relationship_type, from_keys, to_keys):
+    from_str = ', '.join([f'{key}: $from_{key}' for key in from_keys])
+    to_str = ', '.join([f'{key}: $to_{key}' for key in to_keys])
     return (
-        f"MATCH (a:{from_label} {{{from_key}: $from_value}}), (b:{to_label} {{{to_key}: $to_value}}) " #Cerco i nodi esistenti basandomi sulle etichette e le proprietà specificate.
-        f"MERGE (a)-[r:{relationship_type}]->(b)"    #Creo una relazione diretta tra il nodo a ed il nodo b, se la relazione esiste già, non la ricrea. Se non esiste, la crea                              
+        f"MATCH (a:{from_label} {{{from_str}}}), (b:{to_label} {{{to_str}}}) "
+        f"MERGE (a)-[r:{relationship_type}]->(b)"
     )
 
-# Leggi il file CSV degli incidenti
-def read_incidents_csv(file_path): #Leggo il file csv e restituisco una lista di dizionari, ciascuno rappresentante un incidente.
-    incidents = []           #Inizializzo una lista vuota chiamata Incidents, dove memorizzo i dizionari con i dati degli incidenti
-    try:
-        with open(file_path, mode='r', encoding='latin-1') as incidents_file:    #Apro il file csv passato da file_path in modalità lettura (mode='r') e lo decodifica usando la codifica latin-1
-            reader = csv.DictReader(incidents_file, delimiter=';')  #Uso csv.DictReader per leggere il file CSV come un dizionario per ogni riga, dove le chiavi sono i nomi delle colonne
-            for row in reader:
-                # Pulisci le chiavi e valori del dizionario
-                cleaned_row = {key.strip().replace(' ', '_').lower(): value.strip() if value is not None else '' for key, value in row.items()} #Creo una versione "pulita" della riga 
-                incidents.append(cleaned_row)
-    except Exception as e:
-        print(f"An error occurred while reading the file: {e}")
-        exit(1)
+def read_incidents_csv(file_paths):
+    incidents = []
+    for file_path in file_paths:
+        try:
+            with open(file_path, mode='r', encoding='latin-1') as incidents_file:
+                reader = csv.DictReader(incidents_file, delimiter=';')
+                for row in reader:
+                    cleaned_row = {key.strip().replace(' ', '_').lower(): value.strip() if value is not None else '' for key, value in row.items()}
+                    incidents.append(cleaned_row)
+        except Exception as e:
+            print(f"An error occurred while reading the file {file_path}: {e}")
+            exit(1)
     return incidents
 
-print('Data extraction complete\n')
-
-# Inserisco i nodi e relazioni in Neo4j
 def insert_data_to_neo4j(incidents):
     total_incidents = len(incidents)
-    last_print_time = time.time()  # Tempo dell'ultimo aggiornamento della percentuale
-    idpersona_counter = 1  # Inizializzo il contatore per idpersona
+    start_time = time.time()
+    idpersona_counter = 1
 
     with driver.session() as session:
-        clear_graph(session)  # Pulisco il database
+        clear_graph(session)
 
-        for i, incident in enumerate(incidents, start=1):
-            current_time = time.time()
-            elapsed_time = current_time - last_print_time
-            
-            # Mi serve per stampare i progessi dei nodi caricati ogni secondo
-            if elapsed_time >= 1:
-                percent_complete = (i / total_incidents) * 100
-                print(f"Processing incident {i}/{total_incidents} ({percent_complete:.2f}% complete)")
-                last_print_time = current_time  # Aggiono il tempo dell'ultimo aggiornamento
-
-            # Creo il nodo Incidente
+        for incident in tqdm(incidents, desc="Processing incidents", unit="incident"):
             incident_query, incident_params = create_node_query(
                 'Incidente',
                 protocollo=incident.get('protocollo'),
@@ -98,22 +70,10 @@ def insert_data_to_neo4j(incidents):
             )
             session.run(incident_query, incident_params)
 
-            # Creo nodo Veicolo
-            vehicle_query, vehicle_params = create_node_query(
-                'Veicolo',
-                protocollo=incident.get('protocollo'),
-                progressivo=incident.get('progressivo'),
-                tipoveicolo=incident.get('tipoveicolo'),
-                statoveicolo=incident.get('statoveicolo'),
-                statoairbag=incident.get('airbag')
-            )
-            session.run(vehicle_query, vehicle_params)
-
-            # Creo nodo Strada
             road_query, road_params = create_node_query(
                 'Strada',
-                protocollo=incident.get('protocollo'),
-                strada1=incident.get('strada1'),
+                protocollo=incident.get("protocollo"),
+                nome=incident.get('strada1'),
                 localizzazione=incident.get('localizzazione1') + ' ' + incident.get('localizzazione2'),
                 particolarita=incident.get('particolaritastrade'),
                 tipostrada=incident.get('tipostrada'),
@@ -123,50 +83,59 @@ def insert_data_to_neo4j(incidents):
             )
             session.run(road_query, road_params)
 
-            # Creazione nodo Persona con attributo aggiuntivo tipopersona e idpersona autoincrementale
-            person_query, person_params = create_node_query(
-                'Persona',
-                protocollo=incident.get('protocollo'),
-                idpersona=idpersona_counter,  # Assegna il valore del contatore
-                sesso=incident.get('sesso'),
-                tipolesione=incident.get('tipolesione'),
-                casco_cintura=incident.get('cinturacascoutilizzato'),
-                deceduto=incident.get('deceduto'),
-                deceduto_dopo=incident.get('deceduto_dopo'),
-                tipopersona=incident.get('tipopersona')  # Nuovo attributo
-            )
-            session.run(person_query, person_params)
-
-            # Incrementa il contatore per il prossimo idpersona
-            idpersona_counter += 1
-
-            # Creazione delle relazioni tra nodi
             session.run(
-                create_relationship_query('Incidente', 'Veicolo', 'Coinvolge_veicolo', 'protocollo', 'protocollo'),
-                {'from_value': incident.get('protocollo'), 'to_value': incident.get('protocollo')}
+                create_relationship_query('Incidente', 'Strada', 'OCCORSO_SU', ['protocollo'], ['protocollo']),
+                {'from_protocollo': incident.get('protocollo'), 'to_protocollo': incident.get('protocollo')}
             )
 
-            session.run(
-                create_relationship_query('Incidente', 'Strada', 'Occorso_su', 'protocollo', 'protocollo'),
-                {'from_value': incident.get('protocollo'), 'to_value': incident.get('protocollo')}
-            )
+            tipopersona = incident.get('tipopersona')
+            if not (tipopersona and tipopersona.lower() == 'pedone'):
+                vehicle_query, vehicle_params = create_node_query(
+                    'Veicolo',
+                    protocollo=incident.get('protocollo'),
+                    progressivo=incident.get('progressivo'),
+                    statoveicolo=incident.get('statoveicolo'),
+                    statoairbag=incident.get('airbag'),
+                    tipoveicolo=incident.get('tipoveicolo')  # Aggiunto tipoveicolo come attributo
+                )
+                session.run(vehicle_query, vehicle_params)
 
-            session.run(
-                create_relationship_query('Incidente', 'Persona', 'Coinvolge_persona', 'protocollo', 'protocollo'),
-                {'from_value': incident.get('protocollo'), 'to_value': incident.get('protocollo')}
-            )
+                person_query, person_params = create_node_query(
+                    'Persona',
+                    idpersona=idpersona_counter,
+                    sesso=incident.get('sesso'),
+                    tipolesione=incident.get('tipolesione'),
+                    casco_cintura=incident.get('cinturacascoutilizzato'),
+                    deceduto=incident.get('deceduto'),
+                    deceduto_dopo=incident.get('deceduto_dopo'),
+                    tipopersona=incident.get('tipopersona')
+                )
+                session.run(person_query, person_params)
 
-            session.run(
-                create_relationship_query('Veicolo', 'Strada', 'Su', 'protocollo', 'protocollo'),
-                {'from_value': incident.get('protocollo'), 'to_value': incident.get('protocollo')}
-            )
+                # Incrementa il contatore per il prossimo idpersona
+                idpersona_counter += 1
 
-# Inserisci i nodi e le relazioni
-insert_data_to_neo4j(read_incidents_csv(incidents_csv))
+                session.run(
+                    create_relationship_query('Incidente', 'Veicolo', 'COINVOLGE_VEICOLO', ['protocollo', 'progressivo'], ['protocollo', 'progressivo']),
+                    {'from_protocollo': incident.get('protocollo'), 'from_progressivo': incident.get('progressivo'), 'to_protocollo': incident.get('protocollo'), 'to_progressivo': incident.get('progressivo')}
+                )
 
-# Chiudi la connessione al database
+                session.run(
+                    create_relationship_query('Incidente', 'Persona', 'COINVOLGE_PERSONA', ['protocollo'], ['idpersona']),
+                    {'from_protocollo': incident.get('protocollo'), 'to_idpersona': idpersona_counter - 1}
+                )
+
+                session.run(
+                    create_relationship_query('Veicolo', 'Strada', 'SU', ['protocollo', 'progressivo'], ['protocollo', 'nome']),
+                    {'from_protocollo': incident.get('protocollo'), 'from_progressivo': incident.get('progressivo'), 'to_protocollo': incident.get('protocollo'), 'to_nome': incident.get('strada1')}
+                )
+
+                session.run(
+                    create_relationship_query('Veicolo', 'Persona', 'GUIDATO_DA', ['protocollo', 'progressivo'], ['protocollo', 'idpersona']),
+                    {'from_protocollo': incident.get('protocollo'), 'from_progressivo': incident.get('progressivo'), 'to_protocollo': incident.get('protocollo'), 'to_idpersona': idpersona_counter - 1}
+                )
+
+insert_data_to_neo4j(read_incidents_csv(incidents_csv_files))
+
 driver.close()
 print('All data has been processed and the connection to Neo4j is closed.')
-
-
- 
