@@ -3,80 +3,69 @@ import os
 import time
 from neo4j import GraphDatabase
 
-# Caso modellazione 1
-# Con questo tipo di modellazione, otteniamo "tanti" piccoli grafi
-# riferito ad un protocollo, ma non connessi tra loro.
-
-print("Current working directory:", os.getcwd()) #Stampo la directory di lavoro corrente
+print("Current working directory:", os.getcwd()) # Stampiamo la directory di lavoro corrente
 
 # Configuro la connessione a Neo4j
 uri = "bolt://localhost:7687"
 driver = GraphDatabase.driver(uri, auth=("neo4j", "adminadmin"))
 
-# Percorso del file CSV degli incidenti
-incidents_csv = './Datasets/2020/csv_incidentiGennaio.csv'  
-
-
-def clear_graph(session):
-    # Cancello tutti i nodi e relazioni nel grafo
-    session.run("MATCH (n) DETACH DELETE n")
-    print("Graph cleared")
-
-
-# Esempio stringa Cypher da creare
-# MERGE (n:Incidente { protocollo: $protocollo, dataincidente: $dataincidente, chilometrica: $chilometrica, natura: $natura })
-# I parametri verranno poi sostituiti con i valori reali
-def create_node_query(label, **kwargs):  #Creo una query Cypher per inserire (o unire) un nodo con un'etichetta specifica.
-    #label etichetta del nood (Incidente, Persona...)
+# Lista dei percorsi dei file CSV degli incidenti
+incidents_csv_files = [
+    #inidenti 2020
+    './Datasets/2020/csv_incidentiGennaio.csv',
     
-    # kwargs.items() serve a restituire una lista di coppie chiave-valore (dizionario) che rappresentano gli attributi del nodo
+    
+    #Incidenti 2021
+    
+]
+
+def create_node_query(label, **kwargs):  # Creo una query Cypher per inserire (o unire) un nodo con un'etichetta specifica.
     filtered_kwargs = {key: value for key, value in kwargs.items() if value}
-   
-   #join per unire gli elementi in una singola stringa, separati con virgola e spazio
     param_str = ', '.join([f'{key}: ${key}' for key in filtered_kwargs.keys()])
     return f"MERGE (n:{label} {{ {param_str} }})", filtered_kwargs
 
-def create_relationship_query(from_label, to_label, relationship_type, from_key, to_key): #Creo una query Cypher per stabilire una relazione tra due nodi.
+def create_relationship_query(from_label, to_label, relationship_type, from_key, to_key): # Creo una query Cypher per stabilire una relazione tra due nodi.
     return (
-        f"MATCH (a:{from_label} {{{from_key}: $from_value}}), (b:{to_label} {{{to_key}: $to_value}}) " #Cerco i nodi esistenti basandomi sulle etichette e le proprietà specificate.
-        f"MERGE (a)-[r:{relationship_type}]->(b)"    #Creo una relazione diretta tra il nodo a ed il nodo b, se la relazione esiste già, non la ricrea. Se non esiste, la crea                              
+        f"MATCH (a:{from_label} {{{from_key}: $from_value}}), (b:{to_label} {{{to_key}: $to_value}}) " # Cerco i nodi esistenti basandomi sulle etichette e le proprietà specificate.
+        f"MERGE (a)-[r:{relationship_type}]->(b)"    # Creo una relazione diretta tra il nodo a ed il nodo b, se la relazione esiste già, non la ricrea. Se non esiste, la crea.
     )
 
-# Leggi il file CSV degli incidenti
-def read_incidents_csv(file_path): #Leggo il file csv e restituisco una lista di dizionari, ciascuno rappresentante un incidente.
-    incidents = []           #Inizializzo una lista vuota chiamata Incidents, dove memorizzo i dizionari con i dati degli incidenti
-    try:
-        with open(file_path, mode='r', encoding='latin-1') as incidents_file:    #Apro il file csv passato da file_path in modalità lettura (mode='r') e lo decodifica usando la codifica latin-1
-            reader = csv.DictReader(incidents_file, delimiter=';')  #Uso csv.DictReader per leggere il file CSV come un dizionario per ogni riga, dove le chiavi sono i nomi delle colonne
-            for row in reader:
-                # Pulisci le chiavi e valori del dizionario
-                cleaned_row = {key.strip().replace(' ', '_').lower(): value.strip() if value is not None else '' for key, value in row.items()} #Creo una versione "pulita" della riga 
-                incidents.append(cleaned_row)
-    except Exception as e:
-        print(f"An error occurred while reading the file: {e}")
-        exit(1)
+def read_incidents_csv(file_paths): # Leggo più file CSV e restituisco una lista di dizionari, ciascuno rappresentante un incidente.
+    incidents = []  # Inizializzo una lista vuota chiamata Incidents, dove memorizzo i dizionari con i dati degli incidenti
+    for file_path in file_paths:
+        try:
+            with open(file_path, mode='r', encoding='latin-1') as incidents_file:  # Apro il file csv passato da file_path in modalità lettura (mode='r') e lo decodifica usando la codifica latin-1
+                reader = csv.DictReader(incidents_file, delimiter=';')  # Uso csv.DictReader per leggere il file CSV come un dizionario per ogni riga, dove le chiavi sono i nomi delle colonne
+                for row in reader:
+                    # Pulisci le chiavi e valori del dizionario
+                    cleaned_row = {key.strip().replace(' ', '_').lower(): value.strip() if value is not None else '' for key, value in row.items()} # Creo una versione "pulita" della riga 
+                    incidents.append(cleaned_row)
+        except Exception as e:
+            print(f"An error occurred while reading the file {file_path}: {e}")
+            exit(1)
     return incidents
 
-print('Data extraction complete\n')
+def clear_graph(session):
+    # Cancella tutti i nodi e relazioni nel grafo
+    session.run("MATCH (n) DETACH DELETE n")
+    print("Graph cleared")
 
-# Inserisco i nodi e relazioni in Neo4j
 def insert_data_to_neo4j(incidents):
     total_incidents = len(incidents)
     last_print_time = time.time()  # Tempo dell'ultimo aggiornamento della percentuale
     idpersona_counter = 1  # Inizializzo il contatore per idpersona
 
     with driver.session() as session:
-        clear_graph(session)  # Pulisco il database
-
+        clear_graph(session)  # Aggiungi questa riga per pulire il database
         for i, incident in enumerate(incidents, start=1):
             current_time = time.time()
             elapsed_time = current_time - last_print_time
             
-            # Mi serve per stampare i progessi dei nodi caricati ogni secondo
+            # Mi serve per stampare i progressi dei nodi caricati ogni secondo
             if elapsed_time >= 1:
                 percent_complete = (i / total_incidents) * 100
                 print(f"Processing incident {i}/{total_incidents} ({percent_complete:.2f}% complete)")
-                last_print_time = current_time  # Aggiono il tempo dell'ultimo aggiornamento
+                last_print_time = current_time  # Aggiorna il tempo dell'ultimo aggiornamento
 
             # Creo il nodo Incidente
             incident_query, incident_params = create_node_query(
@@ -161,12 +150,12 @@ def insert_data_to_neo4j(incidents):
                 {'from_value': incident.get('protocollo'), 'to_value': incident.get('protocollo')}
             )
 
+# Leggi e combina i dati da tutti i file CSV
+all_incidents = read_incidents_csv(incidents_csv_files)
+
 # Inserisci i nodi e le relazioni
-insert_data_to_neo4j(read_incidents_csv(incidents_csv))
+insert_data_to_neo4j(all_incidents)
 
 # Chiudi la connessione al database
 driver.close()
 print('All data has been processed and the connection to Neo4j is closed.')
-
-
- 
