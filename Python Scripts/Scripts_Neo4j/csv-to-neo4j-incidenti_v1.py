@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 uri = "bolt://localhost:7687"
 driver = GraphDatabase.driver(uri, auth=("neo4j", "adminadmin"))
-
+db_name = "version1"
 def month_order_key(filename):
     month_map = {
         "Gennaio": 1,
@@ -36,14 +36,11 @@ def get_csv_files(base_directory):
         if year.isdigit(): 
             for filename in filenames:
                 if filename.endswith('.csv'):
-                    # Usa os.path.join per unire correttamente i percorsi
                     csv_files.append((year, filename, os.path.join(dirpath, filename))) 
 
-    # Ordina i file CSV per anno e mese
     csv_files.sort(key=lambda x: (int(x[0]), month_order_key(x[1])))
     return [file_path for _, _, file_path in csv_files]
 
-# Specifica la cartella principale contenente i file CSV
 incidents_csv_directory = './Datasets/'
 incidents_csv_files = get_csv_files(incidents_csv_directory)
 
@@ -90,8 +87,12 @@ def read_incidents_csv(file_paths):
 def insert_data_to_neo4j(incidents):
     idpersona_counter = 1
 
+    # Creiamo il database all'inizio della funzione
+    with driver.session() as session:
+        create_database_if_not_exists(session, "version1")
+
+    # Iniziamo ad utilizzare il database per inserire i dati
     with driver.session(database="version1") as session:  
-        create_database_if_not_exists(session, "version1")  
         clear_graph(session)
 
         for incident in tqdm(incidents, desc="Processing incidents", unit="incident"):

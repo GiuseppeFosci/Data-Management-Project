@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 uri = "bolt://localhost:7687"
 driver = GraphDatabase.driver(uri, auth=("neo4j", "adminadmin"))
-
+db_name = "version2"
 def month_order_key(filename):
     month_map = {
         "Gennaio": 1,
@@ -87,103 +87,107 @@ def read_incidents_csv(file_paths):
 def insert_data_to_neo4j(incidents):
     idpersona_counter = 1
 
-    with driver.session(database="version2") as session:  
+    with driver.session() as session:  
+        # Creiamo il database prima di iniziare a utilizzare sessioni specifiche per il database
         create_database_if_not_exists(session, "version2") 
-        clear_graph(session)
+        
+        # Usa una sessione per il database specifico
+        with driver.session(database="version2") as db_session:  
+            clear_graph(db_session)
 
-        for incident in tqdm(incidents, desc="Processing incidents", unit="incident"):
-            incident_query, incident_params = create_node_query(
-                'Incidente',
-                protocollo=incident.get('protocollo'),
-                dataincidente=incident.get('dataoraincidente'),
-                chilometrica=incident.get('chilometrica'),
-                natura=incident.get('naturaincidente'),
-                gruppo=incident.get('gruppo'),
-                traffico=incident.get('traffico'),
-                condizioneatm=incident.get('condizioneatmosferica'),
-                visibilita=incident.get('visibilita'),
-                illuminazione=incident.get('illuminazione'),
-                numero_feriti=incident.get('num_feriti'),
-                numero_illesi=incident.get('num_illesi'),
-                numero_morti=incident.get('num_morti'),
-                longitudine=incident.get('longitude'),
-                latitudine=incident.get('latitude')
-            )
-            session.run(incident_query, incident_params)
-
-            road_query, road_params = create_node_query(
-                'Strada',
-                protocollo=incident.get("protocollo"),
-                nome=incident.get('strada1'),
-                localizzazione=incident.get('localizzazione1') + ' ' + incident.get('localizzazione2'),
-                particolarita=incident.get('particolaritastrade'),
-                tipostrada=incident.get('tipostrada'),
-                fondostradale=incident.get('fondostradale'),
-                pavimentazione=incident.get('pavimentazione'),
-                segnaletica=incident.get('segnaletica')
-            )
-            session.run(road_query, road_params)
-
-            session.run(
-                create_relationship_query('Incidente', 'Strada', 'OCCORSO_SU', ['protocollo'], ['protocollo']),
-                {'from_protocollo': incident.get('protocollo'), 'to_protocollo': incident.get('protocollo')}
-            )
-
-            tipopersona = incident.get('tipopersona')
-            if not (tipopersona and tipopersona.lower() == 'pedone'):
-                vehicle_query, vehicle_params = create_node_query(
-                    'Veicolo',
+            for incident in tqdm(incidents, desc="Processing incidents", unit="incident"):
+                incident_query, incident_params = create_node_query(
+                    'Incidente',
                     protocollo=incident.get('protocollo'),
-                    progressivo=incident.get('progressivo'),
-                    statoveicolo=incident.get('statoveicolo'),
-                    statoairbag=incident.get('airbag')
+                    dataincidente=incident.get('dataoraincidente'),
+                    chilometrica=incident.get('chilometrica'),
+                    natura=incident.get('naturaincidente'),
+                    gruppo=incident.get('gruppo'),
+                    traffico=incident.get('traffico'),
+                    condizioneatm=incident.get('condizioneatmosferica'),
+                    visibilita=incident.get('visibilita'),
+                    illuminazione=incident.get('illuminazione'),
+                    numero_feriti=incident.get('num_feriti'),
+                    numero_illesi=incident.get('num_illesi'),
+                    numero_morti=incident.get('num_morti'),
+                    longitudine=incident.get('longitude'),
+                    latitudine=incident.get('latitude')
                 )
-                session.run(vehicle_query, vehicle_params)
+                db_session.run(incident_query, incident_params)
 
-                vehicle_type_query, vehicle_type_params = create_node_query(
-                    'TipoVeicolo',
-                    nome=incident.get('tipoveicolo')
+                road_query, road_params = create_node_query(
+                    'Strada',
+                    protocollo=incident.get("protocollo"),
+                    nome=incident.get('strada1'),
+                    localizzazione=incident.get('localizzazione1') + ' ' + incident.get('localizzazione2'),
+                    particolarita=incident.get('particolaritastrade'),
+                    tipostrada=incident.get('tipostrada'),
+                    fondostradale=incident.get('fondostradale'),
+                    pavimentazione=incident.get('pavimentazione'),
+                    segnaletica=incident.get('segnaletica')
                 )
-                session.run(vehicle_type_query, vehicle_type_params)
+                db_session.run(road_query, road_params)
 
-                person_query, person_params = create_node_query(
-                    'Persona',
-                    idpersona=idpersona_counter,
-                    sesso=incident.get('sesso'),
-                    tipolesione=incident.get('tipolesione'),
-                    casco_cintura=incident.get('cinturacascoutilizzato'),
-                    deceduto=incident.get('deceduto'),
-                    deceduto_dopo=incident.get('deceduto_dopo'),
-                    tipopersona=incident.get('tipopersona')
-                )
-                session.run(person_query, person_params)
-
-                idpersona_counter += 1
-
-                session.run(
-                    create_relationship_query('Incidente', 'Veicolo', 'COINVOLGE_VEICOLO', ['protocollo', 'progressivo'], ['protocollo', 'progressivo']),
-                    {'from_protocollo': incident.get('protocollo'), 'from_progressivo': incident.get('progressivo'), 'to_protocollo': incident.get('protocollo'), 'to_progressivo': incident.get('progressivo')}
-                )
-
-                session.run(
-                    create_relationship_query('Incidente', 'Persona', 'COINVOLGE_PERSONA', ['protocollo'], ['idpersona']),
-                    {'from_protocollo': incident.get('protocollo'), 'to_idpersona': idpersona_counter - 1}
+                db_session.run(
+                    create_relationship_query('Incidente', 'Strada', 'OCCORSO_SU', ['protocollo'], ['protocollo']),
+                    {'from_protocollo': incident.get('protocollo'), 'to_protocollo': incident.get('protocollo')}
                 )
 
-                session.run(
-                    create_relationship_query('Veicolo', 'TipoVeicolo', 'TIPO', ['protocollo', 'progressivo'], ['nome']),
-                    {'from_protocollo': incident.get('protocollo'), 'from_progressivo': incident.get('progressivo'), 'to_nome': incident.get('tipoveicolo')}
-                )
+                tipopersona = incident.get('tipopersona')
+                if not (tipopersona and tipopersona.lower() == 'pedone'):
+                    vehicle_query, vehicle_params = create_node_query(
+                        'Veicolo',
+                        protocollo=incident.get('protocollo'),
+                        progressivo=incident.get('progressivo'),
+                        statoveicolo=incident.get('statoveicolo'),
+                        statoairbag=incident.get('airbag')
+                    )
+                    db_session.run(vehicle_query, vehicle_params)
 
-                session.run(
-                    create_relationship_query('Veicolo', 'Strada', 'SU', ['protocollo', 'progressivo'], ['protocollo', 'nome']),
-                    {'from_protocollo': incident.get('protocollo'), 'from_progressivo': incident.get('progressivo'), 'to_protocollo': incident.get('protocollo'), 'to_nome': incident.get('strada1')}
-                )
+                    vehicle_type_query, vehicle_type_params = create_node_query(
+                        'TipoVeicolo',
+                        nome=incident.get('tipoveicolo')
+                    )
+                    db_session.run(vehicle_type_query, vehicle_type_params)
 
-                session.run(
-                    create_relationship_query('Veicolo', 'Persona', 'GUIDATO_DA', ['protocollo', 'progressivo'], ['protocollo', 'idpersona']),
-                    {'from_protocollo': incident.get('protocollo'), 'from_progressivo': incident.get('progressivo'), 'to_protocollo': incident.get('protocollo'), 'to_idpersona': idpersona_counter - 1}
-                )
+                    person_query, person_params = create_node_query(
+                        'Persona',
+                        idpersona=idpersona_counter,
+                        sesso=incident.get('sesso'),
+                        tipolesione=incident.get('tipolesione'),
+                        casco_cintura=incident.get('cinturacascoutilizzato'),
+                        deceduto=incident.get('deceduto'),
+                        deceduto_dopo=incident.get('deceduto_dopo'),
+                        tipopersona=incident.get('tipopersona')
+                    )
+                    db_session.run(person_query, person_params)
+
+                    idpersona_counter += 1
+
+                    db_session.run(
+                        create_relationship_query('Incidente', 'Veicolo', 'COINVOLGE_VEICOLO', ['protocollo', 'progressivo'], ['protocollo', 'progressivo']),
+                        {'from_protocollo': incident.get('protocollo'), 'from_progressivo': incident.get('progressivo'), 'to_protocollo': incident.get('protocollo'), 'to_progressivo': incident.get('progressivo')}
+                    )
+
+                    db_session.run(
+                        create_relationship_query('Incidente', 'Persona', 'COINVOLGE_PERSONA', ['protocollo'], ['idpersona']),
+                        {'from_protocollo': incident.get('protocollo'), 'to_idpersona': idpersona_counter - 1}
+                    )
+
+                    db_session.run(
+                        create_relationship_query('Veicolo', 'TipoVeicolo', 'TIPO', ['protocollo', 'progressivo'], ['nome']),
+                        {'from_protocollo': incident.get('protocollo'), 'from_progressivo': incident.get('progressivo'), 'to_nome': incident.get('tipoveicolo')}
+                    )
+
+                    db_session.run(
+                        create_relationship_query('Veicolo', 'Strada', 'SU', ['protocollo', 'progressivo'], ['protocollo', 'nome']),
+                        {'from_protocollo': incident.get('protocollo'), 'from_progressivo': incident.get('progressivo'), 'to_protocollo': incident.get('protocollo'), 'to_nome': incident.get('strada1')}
+                    )
+
+                    db_session.run(
+                        create_relationship_query('Veicolo', 'Persona', 'GUIDATO_DA', ['protocollo', 'progressivo'], ['protocollo', 'idpersona']),
+                        {'from_protocollo': incident.get('protocollo'), 'from_progressivo': incident.get('progressivo'), 'to_protocollo': incident.get('protocollo'), 'to_idpersona': idpersona_counter - 1}
+                    )
 
 insert_data_to_neo4j(read_incidents_csv(incidents_csv_files))
 

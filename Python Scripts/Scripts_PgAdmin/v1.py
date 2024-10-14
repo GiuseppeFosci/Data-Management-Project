@@ -75,8 +75,8 @@ def create_tables(conn):
                 numero_feriti INTEGER,
                 numero_illesi INTEGER,
                 numero_mort INTEGER,
-                longitudine DECIMAL(9,6),
-                latitudine DECIMAL(9,6)
+                longitudine VARCHAR(50),
+                latitudine VARCHAR(50)
             );
         """)
 
@@ -222,14 +222,12 @@ def month_order_key(filename):
         "Dicembre": 12
     }
     
-    # Estrai il mese dal nome del file
     month = re.search(r'csv_incidenti(.*?).csv', filename)  
     if month:
         month_name = month.group(1).strip()  
         return month_map.get(month_name, 0)  
     return 0  
 
-# Funzione per ottenere i file CSV ordinati per anno e mese
 def get_csv_files(base_directory):
     csv_files = []
     for dirpath, _, filenames in os.walk(base_directory):
@@ -239,10 +237,8 @@ def get_csv_files(base_directory):
                 if filename.endswith('.csv'):
                     csv_files.append((year, filename)) 
 
-    # Ordina i file CSV per anno e mese
     csv_files.sort(key=lambda x: (int(x[0]), month_order_key(x[1])))  
 
-    # Restituisci solo i percorsi dei file ordinati
     return [os.path.join(base_directory, x[0], x[1]) for x in csv_files]  
 
 
