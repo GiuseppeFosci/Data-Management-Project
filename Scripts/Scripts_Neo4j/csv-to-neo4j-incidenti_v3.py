@@ -2,11 +2,13 @@ import csv
 import os
 import re
 from neo4j import GraphDatabase
-from tqdm import tqdm  
+from tqdm import tqdm
 
 uri = "bolt://localhost:7687"
 driver = GraphDatabase.driver(uri, auth=("neo4j", "adminadmin"))
-db_name = "version2"
+db_name = "version3"
+
+
 def month_order_key(filename):
     month_map = {
         "Gennaio": 1,
@@ -41,8 +43,7 @@ def get_csv_files(base_directory):
     csv_files.sort(key=lambda x: (int(x[0]), month_order_key(x[1])))  
     return [os.path.join(base_directory, x[0], x[1]) for x in csv_files]  
 
-base_directory = './Datasets'
-incidents_csv_files = get_csv_files(base_directory)
+
 
 def create_database_if_not_exists(session, db_name):
     result = session.run("SHOW DATABASES")
@@ -53,9 +54,6 @@ def create_database_if_not_exists(session, db_name):
     else:
         print(f"Database '{db_name}' already exists.")
 
-def clear_graph(session):
-    session.run("MATCH (n) DETACH DELETE n")
-    print("Graph cleared")
 
 def create_node_query(label, **kwargs):
     filtered_kwargs = {key: value for key, value in kwargs.items() if value}
@@ -70,31 +68,30 @@ def create_relationship_query(from_label, to_label, relationship_type, from_keys
         f"MERGE (a)-[r:{relationship_type}]->(b)"
     )
 
-def read_incidents_csv(file_paths):
+def read_incidents_csv(file_path):
     incidents = []
-    for file_path in file_paths:
-        try:
-            with open(file_path, mode='r', encoding='latin-1') as incidents_file:
-                reader = csv.DictReader(incidents_file, delimiter=';')
-                for row in reader:
-                    cleaned_row = {key.strip().replace(' ', '_').lower(): value.strip() if value is not None else '' for key, value in row.items()}
-                    incidents.append(cleaned_row)
-        except Exception as e:
-            print(f"An error occurred while reading the file {file_path}: {e}")
-            exit(1)
+    try:
+        with open(file_path, mode='r', encoding='latin-1') as incidents_file:
+            reader = csv.DictReader(incidents_file, delimiter=';')
+            for row in reader:
+                cleaned_row = {key.strip().replace(' ', '_').lower(): value.strip() if value is not None else '' for key, value in row.items()}
+                incidents.append(cleaned_row)
+    except Exception as e:
+        print(f"An error occurred while reading the file {file_path}: {e}")
+        return []
     return incidents
 
-def insert_data_to_neo4j(incidents):
+def insert_data_to_neo4j(file_path):
+    print(f"Processing dataset: {file_path}")  
+    incidents = read_incidents_csv(file_path)
+    if not incidents:  
+        return
+    
     idpersona_counter = 1
-
+    
     with driver.session() as session:  
-        # Creiamo il database prima di iniziare a utilizzare sessioni specifiche per il database
-        create_database_if_not_exists(session, "version2") 
-        
-        # Usa una sessione per il database specifico
-        with driver.session(database="version2") as db_session:  
-            clear_graph(db_session)
-
+        create_database_if_not_exists(session, db_name) 
+        with driver.session(database=db_name) as db_session: 
             for incident in tqdm(incidents, desc="Processing incidents", unit="incident"):
                 incident_query, incident_params = create_node_query(
                     'Incidente',
@@ -102,7 +99,6 @@ def insert_data_to_neo4j(incidents):
                     dataincidente=incident.get('dataoraincidente'),
                     chilometrica=incident.get('chilometrica'),
                     natura=incident.get('naturaincidente'),
-                    gruppo=incident.get('gruppo'),
                     traffico=incident.get('traffico'),
                     condizioneatm=incident.get('condizioneatmosferica'),
                     visibilita=incident.get('visibilita'),
@@ -114,6 +110,17 @@ def insert_data_to_neo4j(incidents):
                     latitudine=incident.get('latitude')
                 )
                 db_session.run(incident_query, incident_params)
+
+                gruppo_query, gruppo_params = create_node_query(
+                    'Gruppo',
+                    nome=incident.get('gruppo')
+                )
+                db_session.run(gruppo_query, gruppo_params)
+
+                db_session.run(
+                    create_relationship_query('Gruppo', 'Incidente', 'INTERVENUTO', ['nome'], ['protocollo']),
+                    {'from_nome': incident.get('gruppo'), 'to_protocollo': incident.get('protocollo')}
+                )
 
                 road_query, road_params = create_node_query(
                     'Strada',
@@ -153,6 +160,7 @@ def insert_data_to_neo4j(incidents):
                     person_query, person_params = create_node_query(
                         'Persona',
                         idpersona=idpersona_counter,
+                         protocollo=incident.get('protocollo'),  
                         sesso=incident.get('sesso'),
                         tipolesione=incident.get('tipolesione'),
                         casco_cintura=incident.get('cinturacascoutilizzato'),
@@ -165,9 +173,9 @@ def insert_data_to_neo4j(incidents):
                     idpersona_counter += 1
 
                     db_session.run(
-                        create_relationship_query('Incidente', 'Veicolo', 'COINVOLGE_VEICOLO', ['protocollo', 'progressivo'], ['protocollo', 'progressivo']),
+                        create_relationship_query('Incidente', 'Veicolo', 'COINVOLGE_VEICOLO', ['protocollo'], ['protocollo', 'progressivo']),
                         {'from_protocollo': incident.get('protocollo'), 'from_progressivo': incident.get('progressivo'), 'to_protocollo': incident.get('protocollo'), 'to_progressivo': incident.get('progressivo')}
-                    )
+                    )  
 
                     db_session.run(
                         create_relationship_query('Incidente', 'Persona', 'COINVOLGE_PERSONA', ['protocollo'], ['idpersona']),
@@ -189,7 +197,33 @@ def insert_data_to_neo4j(incidents):
                         {'from_protocollo': incident.get('protocollo'), 'from_progressivo': incident.get('progressivo'), 'to_protocollo': incident.get('protocollo'), 'to_idpersona': idpersona_counter - 1}
                     )
 
-insert_data_to_neo4j(read_incidents_csv(incidents_csv_files))
+                    sesso_value = incident.get('sesso')
+                    if not sesso_value:  
+                        sesso_value = 'NON_SPECIFICATO'  
+                    else:
+                        sesso_value = sesso_value.upper()
 
-driver.close()
-print('All data has been processed and the connection to Neo4j is closed.')
+                    
+                    gender_query, gender_params = create_node_query(
+                        'Sesso',
+                        tipo=sesso_value
+                    )
+                    db_session.run(gender_query, gender_params)
+
+                    
+                    db_session.run(
+                        create_relationship_query('Persona', 'Sesso', 'HA_SESSO', ['idpersona', 'protocollo'], ['tipo']),
+                        {'from_idpersona': idpersona_counter - 1, 'from_protocollo': incident.get('protocollo'), 'to_tipo': sesso_value}
+                    )
+
+
+if __name__ == "__main__":
+    
+    incidents_csv_directory = './Datasets/'
+    incidents_csv_files = get_csv_files(incidents_csv_directory)
+
+    for csv_file in incidents_csv_files:
+        insert_data_to_neo4j(csv_file)
+
+    driver.close()
+    print('All data has been processed and the connection to Neo4j is closed.')
