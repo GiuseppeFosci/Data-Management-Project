@@ -1,13 +1,12 @@
-import csv
 import os
 import re
+import csv
 from neo4j import GraphDatabase
 from tqdm import tqdm
 
 uri = "bolt://localhost:7687"
 driver = GraphDatabase.driver(uri, auth=("neo4j", "adminadmin"))
 db_name = "version1"
-
 
 def month_order_key(filename):
     month_map = {
@@ -60,7 +59,6 @@ def create_database_if_not_exists(session, db_name):
     else:
         print(f"Database '{db_name}' already exists.")
 
-
 def create_node_query(label, **kwargs):
     filtered_kwargs = {key: value for key, value in kwargs.items() if value}
     param_str = ', '.join([f'{key}: ${key}' for key in filtered_kwargs.keys()])
@@ -87,17 +85,16 @@ def read_incidents_csv(file_path):
         exit(1)
     return incidents
 
-def insert_data_to_neo4j(file_path, batch_size=100):
+def insert_data_to_neo4j(file_path, idpersona_counter, batch_size=100):
     print(f"Processing dataset: {file_path}")
     incidents = read_incidents_csv(file_path)
-    idpersona_counter = 1
     batch = []
 
     with driver.session() as session:
         create_database_if_not_exists(session, db_name)
 
         with driver.session(database=db_name) as session:
-            create_indexes(session)  
+            create_indexes(session)
             for incident in tqdm(incidents, desc="Processing incidents", unit="incident"):
                 incident_query, incident_params = create_node_query(
                     'Incidente',
@@ -149,7 +146,7 @@ def insert_data_to_neo4j(file_path, batch_size=100):
                     person_query, person_params = create_node_query(
                         'Persona',
                         idpersona=idpersona_counter,
-                         protocollo=incident.get('protocollo'),  
+                        protocollo=incident.get('protocollo'),  
                         sesso=incident.get('sesso'),
                         tipolesione=incident.get('tipolesione'),
                         casco_cintura=incident.get('cinturacascoutilizzato'),
@@ -182,16 +179,16 @@ def insert_data_to_neo4j(file_path, batch_size=100):
                 for query, params in batch:
                     session.run(query, params)
 
-
+    return idpersona_counter  # Return the updated counter
 
 if __name__ == "__main__":
-    
-
     incidents_csv_directory = './Datasets/'
     incidents_csv_files = get_csv_files(incidents_csv_directory)
 
+    idpersona_counter = 1  
+
     for csv_file in incidents_csv_files:
-        insert_data_to_neo4j(csv_file)
+        idpersona_counter = insert_data_to_neo4j(csv_file, idpersona_counter)
 
     driver.close()
     print('All data has been processed and the connection to Neo4j is closed.')

@@ -42,8 +42,6 @@ def get_csv_files(base_directory):
     csv_files.sort(key=lambda x: (int(x[0]), month_order_key(x[1])))  
     return [os.path.join(base_directory, x[0], x[1]) for x in csv_files]  
 
-
-
 def create_database_if_not_exists(session, db_name):
     result = session.run("SHOW DATABASES")
     databases = [record["name"] for record in result]
@@ -79,13 +77,11 @@ def read_incidents_csv(file_path):
         return []
     return incidents
 
-def insert_data_to_neo4j(file_path):
+def insert_data_to_neo4j(file_path, idpersona_counter):
     print(f"Processing dataset: {file_path}")  
     incidents = read_incidents_csv(file_path)
     if not incidents:  
-        return
-    
-    idpersona_counter = 1
+        return idpersona_counter
     
     with driver.session() as session:  
         create_database_if_not_exists(session, db_name) 
@@ -192,27 +188,26 @@ def insert_data_to_neo4j(file_path):
                     else:
                         sesso_value = sesso_value.upper()
 
-                    
                     gender_query, gender_params = create_node_query(
                         'Sesso',
                         tipo=sesso_value
                     )
                     db_session.run(gender_query, gender_params)
 
-                    
                     db_session.run(
                         create_relationship_query('Persona', 'Sesso', 'HA_SESSO', ['idpersona', 'protocollo'], ['tipo']),
                         {'from_idpersona': idpersona_counter - 1, 'from_protocollo': incident.get('protocollo'), 'to_tipo': sesso_value}
                     )
 
+    return idpersona_counter  # Return the updated counter
 
 if __name__ == "__main__":
-
     incidents_csv_directory = './Datasets/'
     incidents_csv_files = get_csv_files(incidents_csv_directory)
 
+    idpersona_counter = 1  # Initialize counter before processing files
     for csv_file in incidents_csv_files:
-        insert_data_to_neo4j(csv_file)
+        idpersona_counter = insert_data_to_neo4j(csv_file, idpersona_counter)  # Pass and update the counter
 
     driver.close()
     print('All data has been processed and the connection to Neo4j is closed.')

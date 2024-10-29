@@ -24,12 +24,13 @@ def month_order_key(filename):
         "Novembre": 11,
         "Dicembre": 12
     }
-    
+
     month = re.search(r'csv_incidenti(.*?).csv', filename)  
     if month:
         month_name = month.group(1).strip()  
         return month_map.get(month_name, 0)  
     return 0  
+
 
 def get_csv_files(base_directory):
     csv_files = []
@@ -38,11 +39,10 @@ def get_csv_files(base_directory):
         if year.isdigit(): 
             for filename in filenames:
                 if filename.endswith('.csv'):
-                    csv_files.append((year, filename)) 
+                    csv_files.append((year, filename))
 
     csv_files.sort(key=lambda x: (int(x[0]), month_order_key(x[1])))  
     return [os.path.join(base_directory, x[0], x[1]) for x in csv_files]  
-
 
 
 def create_database_if_not_exists(session, db_name):
@@ -60,6 +60,7 @@ def create_node_query(label, **kwargs):
     param_str = ', '.join([f'{key}: ${key}' for key in filtered_kwargs.keys()])
     return f"MERGE (n:{label} {{ {param_str} }})", filtered_kwargs
 
+
 def create_relationship_query(from_label, to_label, relationship_type, from_keys, to_keys):
     from_str = ', '.join([f'{key}: $from_{key}' for key in from_keys])
     to_str = ', '.join([f'{key}: $to_{key}' for key in to_keys])
@@ -67,6 +68,7 @@ def create_relationship_query(from_label, to_label, relationship_type, from_keys
         f"MATCH (a:{from_label} {{{from_str}}}), (b:{to_label} {{{to_str}}}) "
         f"MERGE (a)-[r:{relationship_type}]->(b)"
     )
+
 
 def read_incidents_csv(file_path):
     incidents = []
@@ -81,14 +83,13 @@ def read_incidents_csv(file_path):
         return []
     return incidents
 
-def insert_data_to_neo4j(file_path):
+
+def insert_data_to_neo4j(file_path, idpersona_counter):
     print(f"Processing dataset: {file_path}")  
     incidents = read_incidents_csv(file_path)
     if not incidents:  
-        return
-    
-    idpersona_counter = 1
-    
+        return idpersona_counter  # Return the counter if no incidents
+
     with driver.session() as session:  
         create_database_if_not_exists(session, db_name) 
         with driver.session(database=db_name) as db_session: 
@@ -160,7 +161,7 @@ def insert_data_to_neo4j(file_path):
                     person_query, person_params = create_node_query(
                         'Persona',
                         idpersona=idpersona_counter,
-                         protocollo=incident.get('protocollo'),  
+                        protocollo=incident.get('protocollo'),  
                         sesso=incident.get('sesso'),
                         tipolesione=incident.get('tipolesione'),
                         casco_cintura=incident.get('cinturacascoutilizzato'),
@@ -203,18 +204,18 @@ def insert_data_to_neo4j(file_path):
                     else:
                         sesso_value = sesso_value.upper()
 
-                    
                     gender_query, gender_params = create_node_query(
                         'Sesso',
                         tipo=sesso_value
                     )
                     db_session.run(gender_query, gender_params)
 
-                    
                     db_session.run(
                         create_relationship_query('Persona', 'Sesso', 'HA_SESSO', ['idpersona', 'protocollo'], ['tipo']),
                         {'from_idpersona': idpersona_counter - 1, 'from_protocollo': incident.get('protocollo'), 'to_tipo': sesso_value}
                     )
+    
+    return idpersona_counter  # Return the updated counter
 
 
 if __name__ == "__main__":
@@ -222,8 +223,9 @@ if __name__ == "__main__":
     incidents_csv_directory = './Datasets/'
     incidents_csv_files = get_csv_files(incidents_csv_directory)
 
+    idpersona_counter = 1  # Initialize counter before processing files
     for csv_file in incidents_csv_files:
-        insert_data_to_neo4j(csv_file)
+        idpersona_counter = insert_data_to_neo4j(csv_file, idpersona_counter)  # Pass and update the counter
 
     driver.close()
     print('All data has been processed and the connection to Neo4j is closed.')

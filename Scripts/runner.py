@@ -43,7 +43,7 @@ if __name__ == "__main__":
     ]
 
     while True:
-        answers = inquirer.prompt(questions)
+        answers = inquirer.prompt(questions) 
         
         if not answers['selected_scripts']:
             print("Nessuno script selezionato.")
