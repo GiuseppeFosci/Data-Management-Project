@@ -1,4 +1,4 @@
-# Road Incident Data Management Project - AA 2024/2025 Cardinali - Fosci
+# Road Incident Data Management Project - AA 2023/2024 Cardinali - Fosci
 
 
 A Comparative Analysis of Efficiency and Simplicity in Managing Complex Data: Graph vs SQL. 
