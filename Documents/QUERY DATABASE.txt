@@ -1,0 +1,182 @@
+
+//////////////////////////////INCIDENTE//////////////////////////////////
+//PER CREAZIONE TABELLA INCIDENTE CREATE TABLE incidente (
+    protocollo INTEGER PRIMARY KEY,
+    gruppo INTEGER
+    dataincidente TIMESTAMP,
+    chilometrica VARCHAR(20),
+    natura TEXT,
+    traffico VARCHAR(50),
+    condizioneatm VARCHAR(50),
+    visibilita VARCHAR(50),
+    illuminazione VARCHAR(50),
+    numero_feriti INTEGER,
+    numero_illesi INTEGER,
+    numero_mort INTEGER,
+    longitudine DECIMAL(9,6),
+    latitudine DECIMAL(9,6)
+);
+
+
+INSERT INTO incidente (
+    protocollo, gruppo, dataincidente, chilometrica, natura, traffico, condizioneatm, visibilita, illuminazione,
+    numero_feriti, numero_illesi, numero_mort, longitudine, latitudine
+)
+SELECT
+    protocollo,
+    gruppo,
+    dataoraincidente,
+    chilometrica,
+    naturaincidente,
+    traffico,
+    condizioneatmosferica,
+    visibilita,
+    illuminazione,
+    num_feriti,
+    num_illesi,
+    num_morti,
+    longitude,
+    latitude
+FROM temporanea
+ON CONFLICT (protocollo) DO NOTHING;
+
+
+//////////////////////////////VEICOLO//////////////////////////////////
+
+
+CREATE TABLE veicolo (
+    protocollo INTEGER,
+    progressivo INTEGER,
+    tipo_veicolo VARCHAR(50),
+    stato_veicolo VARCHAR(50),
+    stato_airbag VARCHAR(50),
+    PRIMARY KEY (protocollo, progressivo)
+);
+
+INSERT INTO veicolo (
+    protocollo, progressivo, tipo_veicolo, stato_veicolo, stato_airbag
+)
+SELECT
+    protocollo,
+    progressivo,
+    tipoveicolo,
+    statoveicolo,
+    airbag
+FROM incidenti
+WHERE progressivo IS NOT NULL
+ON CONFLICT (protocollo, progressivo) DO NOTHING;
+
+ALTER TABLE Veicolo
+ADD CONSTRAINT fk_protocollo_incidente
+FOREIGN KEY (Protocollo)
+REFERENCES Incidente(Protocollo)
+ON DELETE CASCADE;
+
+
+//////////////////////////////STRADA//////////////////////////////////
+
+
+
+CREATE TABLE strada (
+    protocollo INTEGER
+    strada1 VARCHAR(255),  -- Definisce il tipo per il campo strada1
+    localizzazione VARCHAR(255),
+    particolarita VARCHAR(255),
+    tipostrada VARCHAR(255),
+    fondostradale VARCHAR(255),
+    pavimentazione VARCHAR(255),
+    segnaletica VARCHAR(255),
+    PRIMARY KEY (idstrada, strada1)  -- Definisce la chiave primaria composta
+);
+
+
+INSERT INTO strada (
+    strada1, 
+    localizzazione, 
+    particolarita, 
+    tipostrada, 
+    fondostradale, 
+    pavimentazione, 
+    segnaletica
+)
+SELECT DISTINCT
+    strada1,  -- Nome della strada
+    localizzazione1 || ' ' || localizzazione2,  -- Combina le colonne di localizzazione (se necessario)
+    particolaritastrade AS particolarita,  -- Mappatura degli attributi
+    tipostrada,
+    fondostradale,
+    pavimentazione,
+    segnaletica
+FROM temporanea;
+
+ALTER TABLE Strada
+ADD CONSTRAINT fk_protocollo_incidente_strada
+FOREIGN KEY (Protocollo)
+REFERENCES Incidente(Protocollo)
+ON DELETE CASCADE; 
+
+
+//////////////////////////////VEICOLO//////////////////////////////////
+
+
+
+CREATE TABLE veicolo (
+    protocollo INTEGER,
+    progressivo INTEGER,
+    tipoveicolo VARCHAR(50),
+    statoveicolo VARCHAR(50),
+    statoairbag VARCHAR(50),
+    PRIMARY KEY (protocollo, progressivo),
+);
+
+INSERT INTO veicolo (
+    protocollo, progressivo, tipo_veicolo, stato_veicolo, stato_airbag
+)
+SELECT
+    protocollo,
+    progressivo,
+    tipoveicolo,
+    statoveicolo,
+    airbag
+FROM temporanea
+WHERE progressivo IS NOT NULL
+ON CONFLICT (protocollo, progressivo) DO NOTHING;
+
+
+CREATE TABLE Persona (
+    idpersona SERIAL,  -- SERIAL genera automaticamente un numero progressivo
+    protocollo integer,  -- Definisce il tipo per il campo strada1
+    tipopersona VARCHAR(255),
+  sesso VARCHAR(255),
+    tipolesione VARCHAR(255),
+  cintura_casco VARCHAR(255),
+  deceduto integer,
+  deceduto_dopo VARCHAR(255),
+    PRIMARY KEY(idpersona,protocollo)  -- Definisce la chiave primaria composta
+);
+
+INSERT INTO persona (
+    protocollo, 
+	tipopersona,
+    sesso,
+	tipolesione,
+	cintura_casco,
+	deceduto,
+	deceduto_dopo
+)
+SELECT
+    protocollo,
+	tipopersona,
+	sesso,
+	tipolesione,
+	cinturacascoutilizzato,
+	deceduto,
+	decedutodopo
+FROM temporanea;
+
+
+ALTER TABLE Persona
+ADD CONSTRAINT fk_protocollo_incidente
+FOREIGN KEY (protocollo)
+REFERENCES Incidente(protocollo)
+ON DELETE CASCADE;

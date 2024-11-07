@@ -94,7 +94,7 @@ def create_tables(conn):
 
         cur.execute(""" 
             CREATE TABLE IF NOT EXISTS strada (
-                idstrada SERIAL PRIMARY KEY,
+                idstrada SERIAL,
                 Protocollo INTEGER,
                 strada1 VARCHAR(255),
                 localizzazione VARCHAR(255),
@@ -103,7 +103,8 @@ def create_tables(conn):
                 fondostradale VARCHAR(255),
                 pavimentazione VARCHAR(255),
                 segnaletica VARCHAR(255),
-                FOREIGN KEY (Protocollo) REFERENCES incidente(Protocollo) ON DELETE CASCADE
+                FOREIGN KEY (Protocollo) REFERENCES incidente(Protocollo) ON DELETE CASCADE,
+                PRIMARY KEY (Protocollo, strada1) 
             );
         """)
 
