@@ -5,7 +5,6 @@ from neo4j import GraphDatabase
 uri = "bolt://localhost:7687"
 driver = GraphDatabase.driver(uri, auth=("neo4j", "adminadmin"))
 
-# Mappatura degli script ai database
 script_to_db = {
     'Scripts/Scripts_PgAdmin/v1.py': None,
     'Scripts/Scripts_Neo4j/csv-to-neo4j-incidenti_v1.py': 'version1',
