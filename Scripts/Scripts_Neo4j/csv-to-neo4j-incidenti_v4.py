@@ -81,13 +81,12 @@ def insert_data_to_neo4j(file_path, idpersona_counter):
     print(f"Processing dataset: {file_path}")  
     incidents = read_incidents_csv(file_path)
     if not incidents:  
-        return idpersona_counter  # Restituisci il contatore se non ci sono incidenti
+        return idpersona_counter  
 
     with driver.session() as session:  
         create_database_if_not_exists(session, db_name) 
         with driver.session(database=db_name) as db_session: 
             for incident in tqdm(incidents, desc="Processing incidents", unit="incident"):
-                # Creazione nodo per l'incidente
                 incident_query, incident_params = create_node_query(
                     'Incidente',
                     protocollo=incident.get('protocollo'),
@@ -106,7 +105,6 @@ def insert_data_to_neo4j(file_path, idpersona_counter):
                 )
                 db_session.run(incident_query, incident_params)
 
-                # Creazione nodo Gruppo
                 gruppo_query, gruppo_params = create_node_query(
                     'Gruppo',
                     nome=incident.get('gruppo')
@@ -119,7 +117,6 @@ def insert_data_to_neo4j(file_path, idpersona_counter):
                     {'from_nome': incident.get('gruppo'), 'to_protocollo': incident.get('protocollo')}
                 )
 
-                # Creazione nodo Strada
                 road_query, road_params = create_node_query(
                     'Strada',
                     protocollo=incident.get("protocollo"),
@@ -133,7 +130,6 @@ def insert_data_to_neo4j(file_path, idpersona_counter):
                 )
                 db_session.run(road_query, road_params)
 
-                # Creazione relazione tra Incidente e Strada
                 db_session.run(
                     create_relationship_query('Incidente', 'Strada', 'OCCORSO_SU', ['protocollo'], ['protocollo']),
                     {'from_protocollo': incident.get('protocollo'), 'to_protocollo': incident.get('protocollo')}
@@ -142,7 +138,6 @@ def insert_data_to_neo4j(file_path, idpersona_counter):
                 # Controllo se la persona è un pedone o un veicolo
                 tipopersona = incident.get('tipopersona')
                 if not (tipopersona and tipopersona.lower() == 'pedone'):
-                    # Creazione nodo Veicolo
                     vehicle_query, vehicle_params = create_node_query(
                         'Veicolo',
                         protocollo=incident.get('protocollo'),
@@ -152,14 +147,12 @@ def insert_data_to_neo4j(file_path, idpersona_counter):
                     )
                     db_session.run(vehicle_query, vehicle_params)
 
-                    # Creazione nodo TipoVeicolo
                     vehicle_type_query, vehicle_type_params = create_node_query(
                         'TipoVeicolo',
                         nome=incident.get('tipoveicolo')
                     )
                     db_session.run(vehicle_type_query, vehicle_type_params)
 
-                    # Creazione nodo Persona
                     person_query, person_params = create_node_query(
                         'Persona',
                         idpersona=idpersona_counter,
@@ -173,10 +166,8 @@ def insert_data_to_neo4j(file_path, idpersona_counter):
                     )
                     db_session.run(person_query, person_params)
 
-                    # Incrementa il contatore
                     idpersona_counter += 1
 
-                    # Creazione relazioni per Veicolo e Persona
                     db_session.run(
                         create_relationship_query('Incidente', 'Veicolo', 'COINVOLGE_VEICOLO', ['protocollo'], ['protocollo', 'progressivo']),
                         {'from_protocollo': incident.get('protocollo'), 'from_progressivo': incident.get('progressivo'), 'to_protocollo': incident.get('protocollo'), 'to_progressivo': incident.get('progressivo')}
@@ -230,7 +221,6 @@ def insert_data_to_neo4j(file_path, idpersona_counter):
                     else:
                         sesso_value = sesso_value.upper()
 
-                    # Creazione nodo Sesso
                     gender_query, gender_params = create_node_query(
                         'Sesso',
                         tipo=sesso_value
@@ -246,15 +236,15 @@ def insert_data_to_neo4j(file_path, idpersona_counter):
                         {'from_tipo': sesso_value, 'to_idpersona': idpersona_counter - 1, 'to_protocollo': incident.get('protocollo')}
                     )
 
-    return idpersona_counter  # Restituisci il contatore aggiornato
+    return idpersona_counter 
 
 if __name__ == "__main__":
     incidents_csv_directory = './Datasets/'
     incidents_csv_files = get_csv_files(incidents_csv_directory)
 
-    idpersona_counter = 1  # Inizializza il contatore
+    idpersona_counter = 1  
     for csv_file in incidents_csv_files:
-        idpersona_counter = insert_data_to_neo4j(csv_file, idpersona_counter)  # Passa e aggiorna il contatore
+        idpersona_counter = insert_data_to_neo4j(csv_file, idpersona_counter)  
 
     driver.close()
     print('All data has been processed and the connection to Neo4j is closed.')

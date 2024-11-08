@@ -34,7 +34,6 @@ def create_bar_chart(postgres_time, neo4j_times, query_name, save_dir):
     plt.title(f"Tempo di Esecuzione - {query_name}")
     plt.ylabel("Tempo di esecuzione (ms)")
     
-    # Salva il grafico nella cartella specificata
     plt.tight_layout()
     plt.savefig(os.path.join(save_dir, f"{query_name.replace(' ', '_')}.png"))
     plt.close()
@@ -57,7 +56,6 @@ query_names = [
 
 ]  
 
-# Funzione per selezionare e inserire i tempi di esecuzione per una query specifica
 def insert_times_and_generate_chart():
     print("Scegli per quale query vuoi inserire i tempi e generare il grafico (1-10):")
     for i, query_name in enumerate(query_names, start=1):
@@ -75,7 +73,6 @@ def insert_times_and_generate_chart():
             neo4j_time = input_execution_times(f"Neo4j V{version} {query_name}")
             neo4j_times.append(neo4j_time)
         
-        # Genera il grafico per la query selezionata
         create_bar_chart(postgres_time, neo4j_times, query_name, save_directory)
         print(f"Grafico per {query_name} salvato in '{save_directory}'.")
     else:

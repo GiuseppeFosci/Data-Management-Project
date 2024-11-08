@@ -135,7 +135,7 @@ def insert_data_from_csv(conn, csv_files):
         for csv_file in csv_files:
             print(f"Importando dati da: {csv_file}")
 
-            # Rilevamento della codifica del file CSV
+            #Mi serve per capire la codifica del csv
             with open(csv_file, 'rb') as file:
                 raw_data = file.read()
                 result = chardet.detect(raw_data)

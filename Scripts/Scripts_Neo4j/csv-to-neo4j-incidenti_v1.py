@@ -179,7 +179,7 @@ def insert_data_to_neo4j(file_path, idpersona_counter, batch_size=100):
                 for query, params in batch:
                     session.run(query, params)
 
-    return idpersona_counter  # Return the updated counter
+    return idpersona_counter  
 
 if __name__ == "__main__":
     incidents_csv_directory = './Datasets/'

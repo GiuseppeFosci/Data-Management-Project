@@ -199,15 +199,14 @@ def insert_data_to_neo4j(file_path, idpersona_counter):
                         {'from_idpersona': idpersona_counter - 1, 'from_protocollo': incident.get('protocollo'), 'to_tipo': sesso_value}
                     )
 
-    return idpersona_counter  # Return the updated counter
-
+    return idpersona_counter 
 if __name__ == "__main__":
     incidents_csv_directory = './Datasets/'
     incidents_csv_files = get_csv_files(incidents_csv_directory)
 
-    idpersona_counter = 1  # Initialize counter before processing files
+    idpersona_counter = 1  
     for csv_file in incidents_csv_files:
-        idpersona_counter = insert_data_to_neo4j(csv_file, idpersona_counter)  # Pass and update the counter
+        idpersona_counter = insert_data_to_neo4j(csv_file, idpersona_counter) 
 
     driver.close()
     print('All data has been processed and the connection to Neo4j is closed.')
